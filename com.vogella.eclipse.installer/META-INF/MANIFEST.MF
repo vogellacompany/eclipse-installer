@@ -1,0 +1,23 @@
+Manifest-Version: 1.0
+Bundle-ManifestVersion: 2
+Bundle-Name: Eclipse Installer
+Bundle-SymbolicName: com.vogella.eclipse.installer;singleton:=true
+Bundle-Version: 1.0.0.qualifier
+Bundle-Vendor: vogella GmbH
+Bundle-RequiredExecutionEnvironment: JavaSE-21
+Automatic-Module-Name: com.vogella.eclipse.installer
+Bundle-ActivationPolicy: lazy
+Require-Bundle: org.eclipse.equinox.common,
+ org.eclipse.equinox.app,
+ org.eclipse.equinox.registry,
+ org.eclipse.equinox.p2.core,
+ org.eclipse.equinox.p2.engine,
+ org.eclipse.equinox.p2.metadata,
+ org.eclipse.equinox.p2.metadata.repository,
+ org.eclipse.equinox.p2.repository,
+ org.eclipse.equinox.p2.director,
+ org.eclipse.equinox.p2.director.app,
+ org.eclipse.swt,
+ org.eclipse.jface,
+ org.eclipse.jface.notifications
+Import-Package: org.osgi.framework

@@ -1,0 +1,41 @@
+name: Build and release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# A newer push replaces an older build that is still running.
+concurrency:
+  group: release
+  cancel-in-progress: true
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Build
+        run: ./mvnw -B clean verify
+      # There is only one release, tagged latest, whose assets each build replaces.
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git tag -f latest
+          git push -f origin latest
+          gh release view latest >/dev/null 2>&1 ||
+            gh release create latest --title "Eclipse Installer" --latest \
+              --notes "Latest build of the Eclipse Installer and its bootstrap scripts."
+          gh release upload latest --clobber \
+            com.vogella.eclipse.installer.product/target/products/eclipse-installer-*.zip \
+            com.vogella.eclipse.installer.product/target/products/eclipse-installer-*.tar.gz \
+            install-eclipse-local.ps1 install-eclipse-server.ps1 install-eclipse-local.sh install-eclipse-server.sh
