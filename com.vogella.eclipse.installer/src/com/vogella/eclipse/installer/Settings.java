@@ -108,7 +108,7 @@ public final class Settings {
 	}
 
 	private static String value(String[] args, int index, String option) {
-		if (index >= args.length) {
+		if (index >= args.length || args[index].startsWith("--")) {
 			throw new IllegalArgumentException("Missing value for " + option);
 		}
 		return args[index];

@@ -172,9 +172,10 @@ if ($Repositories) {
 if ($Features) { $arguments += @("--features", ($Features -join ",")) }
 if ($PSBoundParameters.ContainsKey("CacheDir")) { $arguments += @("--cache-dir", $CacheDir) }
 
-# No exit: this script runs in the launcher's session, which exits with $LASTEXITCODE.
 if ($Headless) {
     Invoke-Native { & (Join-Path $installerDir "eclipsec.exe") -vm (Join-Path $jdk "bin\java.exe") @arguments }
+    # Run by the launcher, exit would end the launcher's session, which exits with $LASTEXITCODE itself.
+    if ($MyInvocation.MyCommand.CommandType -eq "ExternalScript") { exit $LASTEXITCODE }
     return
 }
 # A GUI executable returns right away, so the window stays open after this script ends.

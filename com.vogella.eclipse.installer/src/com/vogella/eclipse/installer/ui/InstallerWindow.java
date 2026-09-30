@@ -427,7 +427,10 @@ public final class InstallerWindow {
 		}
 		TargetKind kind = updateTargetLabel();
 		boolean ok = !checkedFeatures().isEmpty() && (kind == TargetKind.NEW || kind == TargetKind.EXISTING);
-		if (kind == TargetKind.EXISTING) {
+		if (kind == TargetKind.EXISTING && settings.clean) {
+			setButtons(new ButtonSpec("Update", false, ok, () -> start(false)),
+					new ButtonSpec("Reinstall…", true, ok, this::reinstall));
+		} else if (kind == TargetKind.EXISTING) {
 			setButtons(new ButtonSpec("Reinstall…", false, ok, this::reinstall),
 					new ButtonSpec("Update", true, ok, () -> start(false)));
 		} else {
@@ -439,7 +442,9 @@ public final class InstallerWindow {
 		TargetKind kind = targetKind(target());
 		switch (kind) {
 		case NEW -> targetState.setText(settings.name + " will be downloaded and installed here.");
-		case EXISTING -> targetState.setText("Existing installation: selected features are installed or updated.");
+		case EXISTING -> targetState.setText(settings.clean
+				? "Existing installation: --clean asks to delete it and install " + settings.name + " again."
+				: "Existing installation: selected features are installed or updated.");
 		case FOREIGN -> targetState.setText("This folder is not empty and is not an Eclipse installation.");
 		case INVALID -> targetState.setText("Enter a folder.");
 		}

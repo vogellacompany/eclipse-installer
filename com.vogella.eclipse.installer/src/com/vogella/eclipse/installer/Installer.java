@@ -6,6 +6,7 @@ import java.nio.file.Path;
 import java.util.List;
 
 import org.eclipse.core.runtime.CoreException;
+import org.eclipse.core.runtime.OperationCanceledException;
 import org.eclipse.core.runtime.Status;
 
 /** Extracts the application into an empty target and installs or updates the features. */
@@ -26,6 +27,7 @@ public final class Installer {
 		settings.validate();
 		Path target = settings.target;
 		try {
+			checkCanceled();
 			if (settings.clean) {
 				listener.step("Removing " + target);
 				clean(target);
@@ -37,11 +39,13 @@ public final class Installer {
 				}
 				listener.step("Downloading " + fileName(settings.applicationUrl.getPath()));
 				Path archive = Downloader.download(settings.applicationUrl, settings.cacheDir, listener);
+				checkCanceled();
 				listener.step("Extracting " + archive.getFileName());
 				Archives.extract(archive, target, listener);
 			} else {
 				listener.log("Keeping the existing installation in " + target);
 			}
+			checkCanceled();
 			Path home = home(target);
 			if (home == null) {
 				throw new CoreException(Status.error(target + " has no p2 folder, so features cannot be installed into it"));
@@ -54,6 +58,12 @@ public final class Installer {
 			return new Result(target, extract, changed);
 		} catch (IOException e) {
 			throw new CoreException(Status.error(e.getMessage(), e));
+		}
+	}
+
+	private void checkCanceled() {
+		if (listener.isCanceled()) {
+			throw new OperationCanceledException();
 		}
 	}
 

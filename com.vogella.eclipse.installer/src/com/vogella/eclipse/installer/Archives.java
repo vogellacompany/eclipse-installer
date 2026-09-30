@@ -1,20 +1,20 @@
 package com.vogella.eclipse.installer;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.FileSystem;
+import java.nio.file.FileSystems;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.BasicFileAttributes;
-import java.util.Enumeration;
+import java.nio.file.attribute.PosixFilePermission;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipFile;
 
 import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.OperationCanceledException;
@@ -63,19 +63,27 @@ public final class Archives {
 		}
 	}
 
+	/** Reads the zip through the zip file system, which also exposes the Unix permissions of its entries. */
 	private static void unzip(Path archive, Path dest, StatusListener listener) throws IOException, CoreException {
-		try (ZipFile zip = new ZipFile(archive.toFile())) {
-			Enumeration<? extends ZipEntry> entries = zip.entries();
-			while (entries.hasMoreElements()) {
-				ZipEntry entry = entries.nextElement();
-				checkCanceled(listener);
-				Path out = resolve(dest, entry.getName());
-				if (entry.isDirectory()) {
-					Files.createDirectories(out);
-				} else {
+		boolean posix = dest.getFileSystem().supportedFileAttributeViews().contains("posix");
+		try (FileSystem zip = FileSystems.newFileSystem(archive, Map.of("enablePosixFileAttributes", "true"))) {
+			Path top = zip.getPath("/");
+			try (var entries = Files.walk(top)) {
+				for (Path entry : (Iterable<Path>) entries::iterator) {
+					checkCanceled(listener);
+					String name = top.relativize(entry).toString();
+					if (name.isEmpty()) {
+						continue;
+					}
+					Path out = resolve(dest, name);
+					if (Files.isDirectory(entry)) {
+						Files.createDirectories(out);
+						continue;
+					}
 					Files.createDirectories(out.getParent());
-					try (InputStream in = zip.getInputStream(entry)) {
-						Files.copy(in, out, StandardCopyOption.REPLACE_EXISTING);
+					Files.copy(entry, out, StandardCopyOption.REPLACE_EXISTING);
+					if (posix && Files.getPosixFilePermissions(entry).contains(PosixFilePermission.OWNER_EXECUTE)) {
+						out.toFile().setExecutable(true, false);
 					}
 				}
 			}

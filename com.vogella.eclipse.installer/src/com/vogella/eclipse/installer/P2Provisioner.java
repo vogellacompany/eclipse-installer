@@ -33,6 +33,10 @@ import org.eclipse.equinox.p2.engine.IProvisioningPlan;
 import org.eclipse.equinox.p2.engine.ProvisioningContext;
 import org.eclipse.equinox.p2.engine.query.UserVisibleRootQuery;
 import org.eclipse.equinox.p2.metadata.IInstallableUnit;
+import org.eclipse.equinox.p2.metadata.IRequirement;
+import org.eclipse.equinox.p2.metadata.MetadataFactory;
+import org.eclipse.equinox.p2.metadata.Version;
+import org.eclipse.equinox.p2.metadata.VersionRange;
 import org.eclipse.equinox.p2.planner.IPlanner;
 import org.eclipse.equinox.p2.planner.IProfileChangeRequest;
 import org.eclipse.equinox.p2.query.IQueryResult;
@@ -125,9 +129,15 @@ final class P2Provisioner {
 		List<String> changed = new ArrayList<>();
 		List<IInstallableUnit> additions = new ArrayList<>();
 		List<IInstallableUnit> removals = new ArrayList<>();
+		List<IRequirement> floors = new ArrayList<>();
 		for (Feature feature : features) {
 			IInstallableUnit newest = latest.get(feature.id());
 			IInstallableUnit old = installed.get(feature.id());
+			if (old != null) {
+				// Keeps the plan from downgrading the feature to satisfy another feature's dependencies.
+				floors.add(MetadataFactory.createRequirement(IInstallableUnit.NAMESPACE_IU_ID, feature.id(),
+						new VersionRange(old.getVersion(), true, Version.MAX_VERSION, true), null, false, false));
+			}
 			String name = feature.label() != null ? feature.label() : FeatureNames.name(newest);
 			if (old != null && old.getVersion().equals(newest.getVersion())) {
 				listener.log(name + " " + newest.getVersion() + " is up to date");
@@ -165,6 +175,7 @@ final class P2Provisioner {
 				request.setInstallableUnitProfileProperty(iu, IProfile.PROP_PROFILE_ROOT_IU, Boolean.TRUE.toString());
 			}
 			request.removeAll(removals);
+			request.addExtraRequirements(floors);
 			IProvisioningPlan plan = planner.getProvisioningPlan(request, provisioningContext, monitor());
 			check(plan.getStatus());
 

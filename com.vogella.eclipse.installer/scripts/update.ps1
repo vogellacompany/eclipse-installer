@@ -18,7 +18,7 @@ for ($i = 1; ; $i++) {
 }
 try { Move-Item -Path $Next -Destination $Root }
 catch { Move-Item -Path $old -Destination $Root; exit 1 }
-$arguments = @(Get-Content $ArgumentsFile | ForEach-Object { '"' + $_.Replace('"', '') + '"' })
+$arguments = @(Get-Content -Encoding UTF8 $ArgumentsFile | ForEach-Object { '"' + $_.Replace('"', '') + '"' })
 Start-Process -FilePath (Join-Path $Root "eclipse.exe") -ArgumentList $arguments
 Remove-Item -Recurse -Force $staging
 Remove-Item -Force $ArgumentsFile, $PSCommandPath
