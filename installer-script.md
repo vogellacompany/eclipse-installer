@@ -19,6 +19,7 @@ Invoke-WebRequest https://github.com/vogellacompany/eclipse-installer/releases/l
 Unblock-File .\install-eclipse-local.ps1
 ```
 
+`Invoke-WebRequest` with `-OutFile` prints nothing; `Get-Item .\install-eclipse-local.ps1` shows the downloaded file.
 A `.ps1` downloaded from the internet is blocked by default, hence `Unblock-File`.
 Alternatively, start every run with `powershell -ExecutionPolicy Bypass -File .\install-eclipse-local.ps1 ...`.
 
