@@ -84,7 +84,12 @@ public final class SelfUpdate {
 				.ifPresent(parent -> pids.add(Long.toString(parent.pid())));
 		String java = Path.of(System.getProperty("java.home"), "bin", windows ? "javaw.exe" : "java").toString();
 		List<String> relaunch = new ArrayList<>(List.of("-vm", java));
-		relaunch.addAll(List.of(settings.args));
+		// The new installer opens its window; repeating --headless or --clean would redo the finished installation.
+		for (String arg : settings.args) {
+			if (!arg.equals("--headless") && !arg.equals("--clean")) {
+				relaunch.add(arg);
+			}
+		}
 		Path script = Files.createTempFile("eclipse-installer-update", windows ? ".ps1" : ".sh");
 		try (InputStream in = SelfUpdate.class.getResourceAsStream(windows ? "/scripts/update.ps1" : "/scripts/update.sh")) {
 			Files.copy(in, script, StandardCopyOption.REPLACE_EXISTING);

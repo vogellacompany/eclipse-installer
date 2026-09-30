@@ -111,6 +111,10 @@ public final class Settings {
 		if (index >= args.length || args[index].startsWith("--")) {
 			throw new IllegalArgumentException("Missing value for " + option);
 		}
+		// An empty variable in a script must not silently select the default folder, which --clean would delete.
+		if (args[index].isBlank()) {
+			throw new IllegalArgumentException("Empty value for " + option);
+		}
 		return args[index];
 	}
 

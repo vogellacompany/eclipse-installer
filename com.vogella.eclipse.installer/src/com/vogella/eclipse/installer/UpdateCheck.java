@@ -8,14 +8,14 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
-import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.Optional;
 
 import org.osgi.framework.FrameworkUtil;
+import org.osgi.framework.Version;
 
-/** Checks whether the published installer is newer than the running one. */
+/** Checks whether the published installer is newer than the running one, by its bundle version. */
 public final class UpdateCheck {
 
 	private static final Duration TIMEOUT = Duration.ofSeconds(3);
@@ -24,22 +24,25 @@ public final class UpdateCheck {
 	}
 
 	public static Optional<Instant> newerRelease(URI archive) {
-		Instant built = buildTime();
-		if (archive == null || built == null) {
+		if (archive == null) {
 			return Optional.empty();
 		}
 		try {
+			// The release publishes the bundle version of its installer next to the archives.
 			HttpClient client = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL)
 					.connectTimeout(TIMEOUT).build();
-			HttpRequest request = HttpRequest.newBuilder(archive).method("HEAD", HttpRequest.BodyPublishers.noBody())
-					.timeout(TIMEOUT).build();
-			HttpResponse<Void> response = client.send(request, HttpResponse.BodyHandlers.discarding());
+			HttpRequest request = HttpRequest.newBuilder(archive.resolve("installer-version.txt")).timeout(TIMEOUT)
+					.build();
+			HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
 			if (response.statusCode() != 200) {
 				return Optional.empty();
 			}
-			return response.headers().firstValue("Last-Modified")
-					.map(value -> ZonedDateTime.parse(value, DateTimeFormatter.RFC_1123_DATE_TIME).toInstant())
-					.filter(released -> released.isAfter(built.plus(Duration.ofMinutes(30))));
+			Version released = Version.parseVersion(response.body().trim());
+			Version running = FrameworkUtil.getBundle(UpdateCheck.class).getVersion();
+			if (released.compareTo(running) <= 0) {
+				return Optional.empty();
+			}
+			return Optional.of(Optional.ofNullable(time(released.getQualifier())).orElse(Instant.now()));
 		} catch (InterruptedException e) {
 			Thread.currentThread().interrupt();
 			return Optional.empty();
@@ -49,11 +52,9 @@ public final class UpdateCheck {
 	}
 
 	/** Tycho's qualifier is the UTC build time. */
-	static Instant buildTime() {
-		String qualifier = FrameworkUtil.getBundle(UpdateCheck.class).getVersion().getQualifier();
+	static Instant time(String qualifier) {
 		try {
-			return LocalDateTime.parse(qualifier, DateTimeFormatter.ofPattern("yyyyMMddHHmm"))
-					.toInstant(ZoneOffset.UTC);
+			return LocalDateTime.parse(qualifier, DateTimeFormatter.ofPattern("yyyyMMddHHmm")).toInstant(ZoneOffset.UTC);
 		} catch (DateTimeParseException e) {
 			return null;
 		}

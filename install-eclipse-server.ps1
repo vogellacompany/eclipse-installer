@@ -29,19 +29,20 @@ Installs from scratch in the console, reusing the cached downloads.
 Installs from a zipped p2 update site next to a remote one.
 #>
 [CmdletBinding()]
+# Empty values are rejected, so an empty variable in a calling script cannot select a default that -Clean deletes.
 param(
     # URL or local path of the installer zip; by default the latest GitHub release.
-    [string]$InstallerUrl = "https://github.com/vogellacompany/eclipse-installer/releases/latest/download/eclipse-installer-win32.win32.x86_64.zip",
-    [string]$InstallDir,
+    [ValidateNotNullOrEmpty()][string]$InstallerUrl = "https://github.com/vogellacompany/eclipse-installer/releases/latest/download/eclipse-installer-win32.win32.x86_64.zip",
+    [ValidateNotNullOrEmpty()][string]$InstallDir,
     [switch]$Headless,
-    [string]$ApplicationUrl,
+    [ValidateNotNullOrEmpty()][string]$ApplicationUrl,
     # Application name shown by the installer.
-    [string]$Name,
-    [string[]]$Repositories,
-    [string[]]$Features,
+    [ValidateNotNullOrEmpty()][string]$Name,
+    [ValidateNotNullOrEmpty()][string[]]$Repositories,
+    [ValidateNotNullOrEmpty()][string[]]$Features,
     # Downloads and the extracted installer are kept here and reused on the next run.
-    [string]$CacheDir = (Join-Path $env:LOCALAPPDATA "eclipse-installer"),
-    [string]$JavaHome,
+    [ValidateNotNullOrEmpty()][string]$CacheDir = (Join-Path $env:LOCALAPPDATA "eclipse-installer"),
+    [ValidateNotNullOrEmpty()][string]$JavaHome,
     # Deletes the installation before installing; downloaded zips are kept.
     [switch]$Clean
 )
@@ -104,12 +105,27 @@ function Get-Installer([string]$Source) {
         } else {
             Remove-Item -Force $partial -ErrorAction SilentlyContinue
         }
-    } elseif (-not (Test-Path $file)) {
-        Write-Host "Downloading $Source"
-        # The progress bar slows Invoke-WebRequest down by an order of magnitude in Windows PowerShell.
-        $ProgressPreference = "SilentlyContinue"
-        Invoke-WebRequest -Uri $Source -OutFile $partial -UseBasicParsing
+    } else {
+        # Without curl.exe, HttpWebRequest asks for the zip only if the release is newer than the cached one.
+        [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+        $request = [Net.HttpWebRequest]::Create($Source)
+        if (Test-Path $file) { $request.IfModifiedSince = (Get-Item $file).LastWriteTime }
+        try {
+            $response = $request.GetResponse()
+        } catch [Net.WebException] {
+            $status = $_.Exception.Response
+            if ($status -and [int]$status.StatusCode -eq 304) { return $file }
+            throw "Download of $Source failed: $($_.Exception.Message)"
+        }
+        try {
+            $out = [IO.File]::Create($partial)
+            try { $response.GetResponseStream().CopyTo($out) } finally { $out.Dispose() }
+        } finally {
+            $response.Dispose()
+        }
+        (Get-Item $partial).LastWriteTime = $response.LastModified
         Move-Item -Force $partial $file
+        Write-Host "Downloaded $Source"
     }
     return $file
 }
@@ -130,11 +146,14 @@ function Expand-Installer([string]$Zip, [string]$Destination) {
 
 # The installer takes URIs only: a Windows path becomes a file: URI, and a zipped p2 update site a jar:file:...!/ URI.
 function ConvertTo-Location([string]$Location, [switch]$Repository) {
-    # Two or more letters before the colon, so C:\ is taken as a path and not as a scheme.
-    if ($Location -match '^[A-Za-z][A-Za-z0-9+.-]+:') { return $Location }
     $path = $ExecutionContext.SessionState.Path.GetUnresolvedProviderPathFromPSPath($Location)
-    if (-not (Test-Path $path)) { throw "Not found: $path" }
-    $uri = ([Uri]$path).AbsoluteUri
+    if (-not (Test-Path $path)) {
+        # Two or more letters before the colon, so C:\ is taken as a path and not as a scheme.
+        if ($Location -match '^[A-Za-z][A-Za-z0-9+.-]+:') { return $Location }
+        throw "Not found: $path"
+    }
+    # "!" separates the archive from its entry in a jar: URI, so a literal one must be escaped.
+    $uri = ([Uri]$path).AbsoluteUri.Replace("!", "%21")
     if ($Repository -and (Test-Path -PathType Leaf $path)) {
         if ($path -notmatch '\.(zip|jar)$') { throw "$path is neither a folder nor a zipped p2 update site" }
         return "jar:$uri!/"

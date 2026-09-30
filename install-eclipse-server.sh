@@ -43,17 +43,23 @@ cache_dir=""
 java_home="${JAVA_HOME:-}"
 clean=false
 
+# An empty variable in a calling script must not silently select a default, which --clean would delete.
+value() {
+	[ -n "$2" ] && [ "${2#--}" = "$2" ] || fail "Missing or empty value for $1"
+	printf '%s' "$2"
+}
+
 while [ $# -gt 0 ]; do
 	case "$1" in
-	--installer-url) installer_url="$2"; shift 2 ;;
-	--install-dir) install_dir="$2"; shift 2 ;;
+	--installer-url) installer_url="$(value "$1" "${2-}")"; shift 2 ;;
+	--install-dir) install_dir="$(value "$1" "${2-}")"; shift 2 ;;
 	--headless) headless=true; shift ;;
-	--application-url) application_url="$2"; shift 2 ;;
-	--name) name="$2"; shift 2 ;;
-	--repositories) repositories="$2"; shift 2 ;;
-	--features) features="$2"; shift 2 ;;
-	--cache-dir) cache_dir="$2"; shift 2 ;;
-	--java-home) java_home="$2"; shift 2 ;;
+	--application-url) application_url="$(value "$1" "${2-}")"; shift 2 ;;
+	--name) name="$(value "$1" "${2-}")"; shift 2 ;;
+	--repositories) repositories="$(value "$1" "${2-}")"; shift 2 ;;
+	--features) features="$(value "$1" "${2-}")"; shift 2 ;;
+	--cache-dir) cache_dir="$(value "$1" "${2-}")"; shift 2 ;;
+	--java-home) java_home="$(value "$1" "${2-}")"; shift 2 ;;
 	--clean) clean=true; shift ;;
 	-h | --help) usage; exit 0 ;;
 	*) usage >&2; fail "Unknown option $1" ;;
@@ -144,10 +150,14 @@ encode_path() {
 
 to_location() {
 	local location="$1" repository="${2:-}" path
-	case "$location" in
-	[A-Za-z]*:*) echo "$location"; return ;;
-	esac
-	[ -e "$location" ] || fail "Not found: $location"
+	if [ ! -e "$location" ]; then
+		# Only a name that is not an existing file and starts with a URI scheme is taken as a URL.
+		if [[ "$location" =~ ^[A-Za-z][A-Za-z0-9+.-]*: ]]; then
+			echo "$location"
+			return
+		fi
+		fail "Not found: $location"
+	fi
 	path="$(encode_path "$(cd "$(dirname "$location")" && pwd)/$(basename "$location")")"
 	if [ -n "$repository" ] && [ -f "$location" ]; then
 		case "$location" in

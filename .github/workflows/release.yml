@@ -25,6 +25,10 @@ jobs:
           cache: maven
       - name: Build
         run: ./mvnw -B clean verify
+      - name: Write the installer version
+        run: >
+          ls com.vogella.eclipse.installer.product/target/products/com.vogella.eclipse.installer.product/linux/gtk/x86_64/eclipse-installer/plugins
+          | sed -n 's/^com\.vogella\.eclipse\.installer_\(.*\)\.jar$/\1/p' > installer-version.txt
       # There is only one release, tagged latest, whose assets each build replaces.
       - name: Publish
         env:
@@ -38,4 +42,5 @@ jobs:
           gh release upload latest --clobber \
             com.vogella.eclipse.installer.product/target/products/eclipse-installer-*.zip \
             com.vogella.eclipse.installer.product/target/products/eclipse-installer-*.tar.gz \
-            install-eclipse-local.ps1 install-eclipse-server.ps1 install-eclipse-local.sh install-eclipse-server.sh
+            install-eclipse-local.ps1 install-eclipse-server.ps1 install-eclipse-local.sh install-eclipse-server.sh \
+            installer-version.txt
