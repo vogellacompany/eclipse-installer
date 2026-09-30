@@ -58,35 +58,37 @@ function Invoke-Native([scriptblock]$Command) {
 # The installer cannot report this itself: its launcher jar needs Java 21 to load at all.
 function Resolve-Jdk {
     if ($JavaHome) {
-        $jdk = $JavaHome.TrimEnd("\")
-        if ((Split-Path -Leaf $jdk) -eq "bin") { $jdk = Split-Path -Parent $jdk }
-        if (-not (Test-Path (Join-Path $jdk "bin\java.exe"))) { throw "No java.exe in $jdk\bin" }
+        $folder = $JavaHome.TrimEnd("\")
+        $java = @((Join-Path $folder "bin\java.exe"), (Join-Path $folder "java.exe")) | Where-Object { Test-Path $_ } | Select-Object -First 1
+        if (-not $java) { throw "No java.exe in $folder or $folder\bin" }
     } else {
         $command = Get-Command java.exe -ErrorAction SilentlyContinue
         if (-not $command) { throw "No Java on the PATH, install Java 21 or newer or pass -JavaHome" }
-        $jdk = Split-Path -Parent (Split-Path -Parent $command.Source)
+        $java = $command.Source
     }
-    $release = Join-Path $jdk "release"
-    if (Test-Path $release) {
-        $match = Select-String -Path $release -Pattern '^JAVA_VERSION="([^"]+)"' | Select-Object -First 1
-        if ($match) {
-            $version = $match.Matches[0].Groups[1].Value
-            $major = if ($version.StartsWith("1.")) { [int]$version.Split(".")[1] } else { [int](($version -split "[.+-]")[0]) }
-            if ($major -lt 21) { throw "Java $version in $jdk is too old, the installer needs Java 21 or newer; pass -JavaHome" }
-        }
-    }
-    Write-Host "Using Java in $jdk"
+    # Asks Java itself, because java.exe on the PATH can be a shim such as Oracle's javapath folder.
+    $properties = Invoke-Native { & $java -XshowSettings:properties -version 2>&1 } | ForEach-Object { "$_" }
+    $jdkLine = $properties | Where-Object { $_ -match '^\s*java\.home = (.+)$' } | Select-Object -First 1
+    $versionLine = $properties | Where-Object { $_ -match '^\s*java\.specification\.version = (.+)$' } | Select-Object -First 1
+    if (-not $jdkLine -or -not $versionLine) { throw "Cannot read the Java version of $java" }
+    $jdk = ($jdkLine -replace '^\s*java\.home = ', '').Trim()
+    $version = ($versionLine -replace '^\s*java\.specification\.version = ', '').Trim()
+    $major = if ($version.StartsWith("1.")) { [int]$version.Split(".")[1] } else { [int]($version.Split(".")[0]) }
+    if ($major -lt 21) { throw "Java $version ($java) is too old, the installer needs Java 21 or newer; pass -JavaHome" }
+    Write-Host "Using Java $version in $jdk"
     return $jdk
 }
 
-# Returns the local installer zip; $script:InstallerChanged tells whether it is new since the last run.
+# A short key of the installer URL, so archive and extracted installer belong to exactly one URL.
+function Get-Key([string]$Text) {
+    $hash = [Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::UTF8.GetBytes($Text))
+    return (($hash[0..7] | ForEach-Object { $_.ToString("x2") }) -join "")
+}
+
+# Returns the local installer zip, downloading it only if the server has a newer one.
 function Get-Installer([string]$Source) {
-    if (Test-Path $Source) {
-        # A local zip may have been rebuilt under the same name, so it is always extracted again.
-        $script:InstallerChanged = $true
-        return (Resolve-Path $Source).Path
-    }
-    $file = Join-Path $CacheDir ([IO.Path]::GetFileName(([Uri]$Source).AbsolutePath))
+    if (Test-Path $Source) { return (Resolve-Path $Source).Path }
+    $file = Join-Path $CacheDir ("installer-" + (Get-Key $Source) + ".zip")
     $partial = "$file.part"
     $curl = Join-Path $env:SystemRoot "System32\curl.exe"
     if (Test-Path $curl) {
@@ -98,7 +100,6 @@ function Get-Installer([string]$Source) {
         if ($status -eq "200" -and (Test-Path $partial) -and (Get-Item $partial).Length -gt 0) {
             Write-Host "Downloaded $Source"
             Move-Item -Force $partial $file
-            $script:InstallerChanged = $true
         } else {
             Remove-Item -Force $partial -ErrorAction SilentlyContinue
         }
@@ -108,7 +109,6 @@ function Get-Installer([string]$Source) {
         $ProgressPreference = "SilentlyContinue"
         Invoke-WebRequest -Uri $Source -OutFile $partial -UseBasicParsing
         Move-Item -Force $partial $file
-        $script:InstallerChanged = $true
     }
     return $file
 }
@@ -144,11 +144,16 @@ function ConvertTo-Location([string]$Location, [switch]$Repository) {
 $jdk = Resolve-Jdk
 New-Item -ItemType Directory -Force -Path $CacheDir | Out-Null
 
-$script:InstallerChanged = $false
 $zip = Get-Installer $InstallerUrl
-$installerDir = Join-Path $CacheDir ("installer-" + [IO.Path]::GetFileNameWithoutExtension($zip))
-if ($script:InstallerChanged -or $Clean -or -not (Test-Path (Join-Path $installerDir "eclipsec.exe"))) {
+$installerDir = Join-Path $CacheDir ("installer-" + (Get-Key $InstallerUrl))
+# Records which archive the folder came from, so a failed extraction is retried and a newer archive replaces it.
+$marker = Join-Path $installerDir ".extracted-from"
+$item = Get-Item $zip
+$stamp = "$($item.FullName) $($item.LastWriteTimeUtc.Ticks) $($item.Length)"
+$extracted = if (Test-Path $marker) { (Get-Content -Raw $marker).Trim() } else { "" }
+if ($Clean -or $extracted -ne $stamp -or -not (Test-Path (Join-Path $installerDir "eclipsec.exe"))) {
     Expand-Installer $zip $installerDir
+    Set-Content -Path $marker -Value $stamp -NoNewline
 }
 
 # The script has just fetched the latest release, so the installer need not look for one.

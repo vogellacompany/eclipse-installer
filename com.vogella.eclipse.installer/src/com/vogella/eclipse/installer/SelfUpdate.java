@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.eclipse.core.runtime.CoreException;
+import org.eclipse.core.runtime.OperationCanceledException;
 import org.eclipse.core.runtime.Status;
 
 /** Replaces the running installer with the published release and restarts it. */
@@ -52,6 +53,9 @@ public final class SelfUpdate {
 			Files.delete(archive);
 			if (!Files.exists(next.resolve(relativeLauncher()))) {
 				throw new CoreException(Status.error("The downloaded installer has no launcher " + relativeLauncher()));
+			}
+			if (listener.isCanceled()) {
+				throw new OperationCanceledException();
 			}
 			startHelper(next);
 		} catch (IOException | CoreException | RuntimeException e) {

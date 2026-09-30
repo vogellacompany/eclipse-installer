@@ -87,14 +87,13 @@ major="${major%%.*}"
 echo "Using Java $version ($java)"
 
 mkdir -p "$installer_cache"
-installer_dir="$installer_cache/installer-${asset%.tar.gz}"
-changed=false
+# Archive and extracted installer belong to one installer URL, so changing the URL never reuses another installer.
+key="$(printf '%s' "$installer_url" | sha256sum | cut -c1-16)"
+installer_dir="$installer_cache/installer-$key"
 if [ -f "$installer_url" ]; then
-	archive="$installer_url"
-	# A local archive may have been rebuilt under the same name, so it is always extracted again.
-	changed=true
+	archive="$(cd "$(dirname "$installer_url")" && pwd)/$(basename "$installer_url")"
 else
-	archive="$installer_cache/$asset"
+	archive="$installer_cache/installer-$key.tar.gz"
 	# Downloads only if the release is newer than the cached archive.
 	condition=()
 	[ -f "$archive" ] && condition=(--time-cond "$archive")
@@ -104,13 +103,15 @@ else
 	if [ "$status" = 200 ] && [ -s "$archive.part" ]; then
 		echo "Downloaded $installer_url"
 		mv -f "$archive.part" "$archive"
-		changed=true
 	else
 		rm -f "$archive.part"
 	fi
 fi
 
-if $changed || $clean || [ ! -x "$installer_dir/$launcher" ]; then
+# Records which archive the folder came from, so a failed extraction is retried and a newer archive replaces it.
+marker="$installer_dir/.extracted-from"
+stamp="$(stat -c '%n %Y %s' "$archive")"
+if $clean || [ ! -x "$installer_dir/$launcher" ] || [ "$(cat "$marker" 2>/dev/null)" != "$stamp" ]; then
 	echo "Extracting $archive"
 	rm -rf "$installer_dir.part"
 	mkdir -p "$installer_dir.part"
@@ -124,6 +125,7 @@ if $changed || $clean || [ ! -x "$installer_dir/$launcher" ]; then
 	rm -rf "$installer_dir"
 	mv "$root" "$installer_dir"
 	rm -rf "$installer_dir.part"
+	printf '%s' "$stamp" > "$marker"
 fi
 
 # The installer takes URIs only: a local path becomes a file: URI, and a zipped p2 update site a jar:file:...!/ URI.

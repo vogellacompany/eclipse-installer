@@ -7,10 +7,12 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 
 import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.IProgressMonitor;
@@ -19,6 +21,7 @@ import org.eclipse.core.runtime.NullProgressMonitor;
 import org.eclipse.core.runtime.OperationCanceledException;
 import org.eclipse.core.runtime.Status;
 import org.eclipse.equinox.internal.p2.director.app.DirectorApplication;
+import org.eclipse.equinox.internal.provisional.p2.director.PlanExecutionHelper;
 import org.eclipse.equinox.p2.core.IProvisioningAgent;
 import org.eclipse.equinox.p2.core.IProvisioningAgentProvider;
 import org.eclipse.equinox.p2.core.ProvisionException;
@@ -92,9 +95,14 @@ final class P2Provisioner {
 		if (profile == null) {
 			throw new CoreException(Status.error("No p2 profile " + profileId + " found in " + target.resolve("p2")));
 		}
+		// All installed units count, including features that came in through the product or another feature.
 		Map<String, IInstallableUnit> installed = new HashMap<>();
+		for (IInstallableUnit iu : profile.query(QueryUtil.createIUAnyQuery(), null)) {
+			installed.merge(iu.getId(), iu, (a, b) -> a.getVersion().compareTo(b.getVersion()) >= 0 ? a : b);
+		}
+		Set<String> roots = new HashSet<>();
 		for (IInstallableUnit iu : profile.query(new UserVisibleRootQuery(), null)) {
-			installed.put(iu.getId(), iu);
+			roots.add(iu.getId());
 		}
 
 		listener.step("Loading update sites");
@@ -132,8 +140,8 @@ final class P2Provisioner {
 			listener.log(old == null ? name + ": install " + newest.getVersion()
 					: name + ": update " + old.getVersion() + " to " + newest.getVersion());
 			additions.add(newest);
-			// p2 drops an IU that is both added and removed.
-			if (old != null) {
+			// p2 drops an IU that is both added and removed; a unit other features require stays installed.
+			if (old != null && roots.contains(feature.id())) {
 				removals.add(old);
 			}
 			changed.add(feature.id());
@@ -161,7 +169,8 @@ final class P2Provisioner {
 			check(plan.getStatus());
 
 			listener.step("Downloading and installing");
-			check(engine.perform(plan, monitor()));
+			// Also runs the installer plan that adds provisioning extensions some features need.
+			check(PlanExecutionHelper.executePlan(plan, engine, provisioningContext, monitor()));
 		} catch (CoreException | RuntimeException e) {
 			failure = e;
 			throw e;

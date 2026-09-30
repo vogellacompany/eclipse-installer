@@ -276,12 +276,23 @@ public final class InstallerWindow {
 			return;
 		}
 		running = true;
+		canceled = false;
 		updateLink.setEnabled(false);
 		targetText.setEnabled(false);
 		browseButton.setEnabled(false);
 		featureTable.setEnabled(false);
 		setButtons();
-		StatusListener listener = name -> ui(() -> updateText.setText("\u24D8  " + name + "…"));
+		StatusListener listener = new StatusListener() {
+			@Override
+			public void step(String name) {
+				ui(() -> updateText.setText("\u24D8  " + name + "…"));
+			}
+
+			@Override
+			public boolean isCanceled() {
+				return canceled;
+			}
+		};
 		background("Installer self-update", () -> {
 			try {
 				selfUpdate.prepareAndSchedule(listener);
@@ -297,7 +308,12 @@ public final class InstallerWindow {
 			return;
 		}
 		running = false;
-		updateText.setText("\u24D8  Update failed: " + firstLine(String.valueOf(e.getMessage())));
+		if (closeWhenDone) {
+			shell.dispose();
+			return;
+		}
+		updateText.setText(e instanceof OperationCanceledException ? "\u24D8  Update canceled."
+				: "\u24D8  Update failed: " + firstLine(String.valueOf(e.getMessage())));
 		updateLink.setText("<a>Open release page</a>");
 		updateLink.setEnabled(true);
 		targetText.setEnabled(true);
