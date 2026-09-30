@@ -76,6 +76,8 @@ Archives in `.tar.gz` format are extracted with the system `tar`.
 
 The built-in defaults are in `com.vogella.eclipse.installer/defaults.properties`.
 Command-line options override them.
+Without a `target`, Windows installs into `%LOCALAPPDATA%\Programs\<name>` (for example `eclipse-sdk`), the Windows convention for per-user applications that needs no administrator rights, and Linux into `~/eclipse/sdk`.
+An installer running elevated on Windows offers no **Start** button, since Eclipse started from it would run as administrator and create its workspace in the administrator's profile.
 Keys are `name`, `applicationUrl` (or `applicationUrl.win32`, `applicationUrl.linux`), `target`, `repositories`, `features`, `label.<feature id>` and `cacheDir`; `${user.home}` and `${env.NAME}` are expanded.
 
 ## Updates

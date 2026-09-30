@@ -39,6 +39,7 @@ Java 21 or newer is required, either on the `PATH` or given with the Java option
 | Start from scratch | `--clean` | `-Clean` |
 
 Options that are not given fall back to the installer's defaults.
+Without an install folder, Windows uses `%LOCALAPPDATA%\Programs\<name>` (for example `%LOCALAPPDATA%\Programs\eclipse-sdk`), which needs no administrator rights, and Linux uses `~/eclipse/sdk`.
 The installer is extracted inside the cache folder, next to the downloaded archives.
 
 A local zip in the update sites must contain the p2 metadata (`content.jar` and `artifacts.jar`, or their composite variants) at its top level.
@@ -80,6 +81,7 @@ The exit code is 0 on success, 1 on failure and 2 for invalid options.
 
 The same commands without `--headless` or `-Headless` open the installer window with the name, the target folder and the features filled in.
 The target folder can still be changed there, and **Install** (or **Update** for an existing installation) starts the run.
+When the installer runs elevated, for example to install into `Program Files`, the window offers no **Start** button: Eclipse started from there would run as administrator and create its workspace in the administrator's profile, so start it afterwards as your normal user.
 
 ## Choosing features
 

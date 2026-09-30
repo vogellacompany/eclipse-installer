@@ -5,6 +5,7 @@ import java.io.InputStream;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -88,7 +89,8 @@ public final class Settings {
 		String url = urlOverride != null ? urlOverride
 				: get(props, "applicationUrl." + os, get(props, "applicationUrl", null));
 		s.applicationUrl = url == null || url.isBlank() ? null : URI.create(url.trim());
-		s.target = Path.of(get(props, "target", System.getProperty("user.home") + "/eclipse")).toAbsolutePath()
+		String target = get(props, "target", null);
+		s.target = (target == null || target.isBlank() ? defaultTarget(os, s.name) : Path.of(target)).toAbsolutePath()
 				.normalize();
 		s.repositories = split(get(props, "repositories", "")).stream().map(URI::create).toList();
 		List<Feature> features = new ArrayList<>();
@@ -132,6 +134,17 @@ public final class Settings {
 
 	private static List<String> split(String value) {
 		return Arrays.stream(value.split(",")).map(String::trim).filter(v -> !v.isEmpty()).toList();
+	}
+
+	/** Per-user applications live in %LOCALAPPDATA%\Programs on Windows, which needs no administrator rights. */
+	private static Path defaultTarget(String os, String name) {
+		String localAppData = System.getenv("LOCALAPPDATA");
+		if ("win32".equals(os) && localAppData != null) {
+			String folder = Normalizer.normalize(name, Normalizer.Form.NFD).replaceAll("\\p{M}", "")
+					.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", "-").replaceAll("^-|-$", "");
+			return Path.of(localAppData, "Programs", folder.isEmpty() ? "eclipse" : folder);
+		}
+		return Path.of(System.getProperty("user.home"), "eclipse", "sdk");
 	}
 
 	private static Path defaultCacheDir(String os) {

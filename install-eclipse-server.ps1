@@ -8,7 +8,8 @@ The installer extracts an Eclipse application zip into the target folder if that
 empty, and installs or updates the latest version of a set of features in it.
 This script only checks Java, fetches and caches the installer zip, and starts it: with -Headless it runs
 in the console, otherwise it opens the installer window.
-Options that are not given fall back to the installer's defaults.
+Options that are not given fall back to the installer's defaults; without -InstallDir the installer uses
+%LOCALAPPDATA%\Programs\<name>.
 Java 21 or newer must be on the PATH, or JavaHome has to point at it (the JDK folder or its bin folder).
 
 .EXAMPLE

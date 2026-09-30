@@ -38,6 +38,7 @@ import org.eclipse.swt.widgets.TableItem;
 import org.eclipse.swt.widgets.Text;
 
 import com.vogella.eclipse.installer.Archives;
+import com.vogella.eclipse.installer.Elevation;
 import com.vogella.eclipse.installer.FeatureNames;
 import com.vogella.eclipse.installer.Installer;
 import com.vogella.eclipse.installer.StatusListener;
@@ -513,16 +514,19 @@ public final class InstallerWindow {
 		browseButton.setEnabled(true);
 		featureTable.setEnabled(true);
 		if (failure == null) {
-			resultLabel.setText(result.changedFeatures().isEmpty() && !result.extracted()
-					? "Everything is up to date."
-					: settings.name + " is ready.");
+			String summary = result.changedFeatures().isEmpty() && !result.extracted() ? "Everything is up to date."
+					: settings.name + " is ready.";
+			// Started from here it would run as administrator and put its workspace into the admin account.
+			resultLabel.setText(Elevation.isElevated()
+					? summary + " Start it as your normal user, not from this installer running as administrator."
+					: summary);
 			appendLog(resultLabel.getText());
 			updateTargetLabel();
 			List<String> launcher = Installer.launchCommand(result.target());
 			List<ButtonSpec> buttons = new ArrayList<>();
 			buttons.add(new ButtonSpec("Close", false, true, shell::close));
 			buttons.add(new ButtonSpec("Open folder", false, true, () -> Program.launch(result.target().toString())));
-			if (launcher != null) {
+			if (launcher != null && !Elevation.isElevated()) {
 				buttons.add(new ButtonSpec("Start " + settings.name, true, true, () -> launch(launcher)));
 			}
 			setButtons(buttons.toArray(ButtonSpec[]::new));
